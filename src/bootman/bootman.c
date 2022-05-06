@@ -130,11 +130,13 @@ void boot_manager_free(BootManager *self)
 
 static bool boot_manager_select_bootloader(BootManager *self)
 {
+        return true;
+        /*
         const BootLoader *selected = NULL;
         int selected_boot_mask = 0;
         int wanted_boot_mask = self->sysconfig->wanted_boot_mask;
 
-        /* Select a bootloader based on the capabilities */
+        // Select a bootloader based on the capabilities
         for (size_t i = 0; i < ARRAY_SIZE(bootman_known_loaders); i++) {
                 const BootLoader *l = bootman_known_loaders[i];
                 selected_boot_mask = l->get_capabilities(self);
@@ -151,14 +153,14 @@ static bool boot_manager_select_bootloader(BootManager *self)
 
         self->bootloader = selected;
 
-        /* Emit debug bits */
+        // Emit debug bits
         if ((wanted_boot_mask & BOOTLOADER_CAP_UEFI) == BOOTLOADER_CAP_UEFI) {
                 LOG_DEBUG("UEFI boot now selected (%s)", self->bootloader->name);
         } else {
                 LOG_DEBUG("Legacy boot now selected (%s)", self->bootloader->name);
         }
 
-        /* Finally, initialise the bootloader itself now */
+        // Finally, initialise the bootloader itself now
         if (!self->bootloader->init(self)) {
                 self->bootloader->destroy(self);
                 LOG_FATAL("Cannot initialise bootloader %s", self->bootloader->name);
@@ -166,6 +168,7 @@ static bool boot_manager_select_bootloader(BootManager *self)
         }
 
         return true;
+        */
 }
 
 bool boot_manager_set_prefix(BootManager *self, char *prefix)
@@ -730,6 +733,8 @@ bool boot_manager_needs_update(BootManager *self)
 
 bool boot_manager_set_uname(BootManager *self, const char *uname)
 {
+        return true;
+        /*
         assert(self != NULL);
 
         if (!uname) {
@@ -747,6 +752,7 @@ bool boot_manager_set_uname(BootManager *self, const char *uname)
         memcpy(&(self->sys_kernel), &k, sizeof(struct SystemKernel));
         self->have_sys_kernel = have_sys_kernel;
         return self->have_sys_kernel;
+        */
 }
 
 static bool _boot_manager_enumerate_initrds_freestanding(BootManager *self, const char *dir)

@@ -1,31 +1,121 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  workflow_dispatch:
+    inputs:
+      manual-bump:
+        description: "Manual bump"
+        required: true
+        default: false
+        type: boolean
+      make-release:
+        description: "Manual build should make release"
+        required: true
+        default: false
+        type: boolean
+      skip-sync:
+        description: "Skip sync from upstream"
+        required: true
+        default: false
+        type: boolean
+  push:
+    branches:
+      - "master"
+  schedule:
+    - cron: "0 7 * * 1"
+
+permissions:
+  id-token: "write"
+  contents: "write"
+  packages: "write"
+  pull-requests: "read"
 
 jobs:
-  build:
+  env:
+    runs-on: ubuntu-latest
+    name: Prepare environment
+    env:
+      ACTION: ${{ github.event_name }}
+    steps:
+      - name: Prepare environment
+        run: |
+          echo "Preparing environment variables..."
+    outputs:
+      manual-run: ${{ env.ACTION == 'workflow_dispatch' }}
+      push-run: ${{ env.ACTION == 'push' }}
+
+  fork-sync:
+    needs: env
+    if: ${{ !github.event.inputs.skip-sync }}
+    runs-on: ubuntu-latest
+    name: Sync latest commits from upstream repo
+    steps:
+      - name: Checkout target repo
+        uses: actions/checkout@v2
+      - name: Sync upstream changes
+        id: sync
+        uses: aormsby/Fork-Sync-With-Upstream-action@v3.3
+        with:
+          target_sync_branch: master
+          target_repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          upstream_sync_branch: master
+          upstream_sync_repo: clearlinux/clr-boot-manager
+      - name: Show value of 'has_new_commits'
+        run: echo ${{ steps.sync.outputs.has_new_commits }}
+      - name: New commits found
+        if: ${{ steps.sync.outputs.has_new_commits == 'true' }}
+        run: echo "New commits were found to sync."
+      - name: No new commits
+        if: ${{ steps.sync.outputs.has_new_commits == 'false' }}
+        run: echo "There were no new commits."
+    outputs:
+      need-down-stream: ${{ steps.sync.outputs.has_new_commits }}
+
+  bump:
+    needs: [env, fork-sync]
+    if: ${{ (success() && needs.fork-sync.outputs.need-down-stream == 'true') || github.event.inputs.manual-bump }}
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-      with:
-        submodules: true
-    - name: Prepare
-      run: |
-        sudo apt-get update
-        sudo apt-get install libefiboot-dev check grep ninja-build meson gcc libblkid-dev lcov valgrind gnu-efi libefivar-dev ruby ruby-dev
-        sudo gem install coveralls-lcov
-    - name: "Run Test: stock"
-      env:
-        CC: "gcc-9"
-      run: |
-        ./scripts/run-test-suite.sh stock && coveralls-lcov outCoverage/coverage.info
-    - name: "Run Test: systemd"
-      env:
-        CC: "gcc-9"
-      run: |
-        ./scripts/run-test-suite.sh systemd && coveralls-lcov outCoverage/coverage.info
-    - name: "Run Test: shim-systemd-boot"
-      env:
-        CC: "gcc-9"
-      run: |
-        ./scripts/run-test-suite.sh shim-systemd-boot && coveralls-lcov outCoverage/coverage.info
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: "0"
+      - name: Bump version and push tag
+        uses: anothrNick/github-tag-action@1.39.0
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          WITH_V: true
+          DEFAULT_BUMP: patch
+
+  build-release:
+    needs: [env, bump]
+    if: ${{ (success() && needs.env.outputs.push-run == 'true') || github.event.inputs.make-release }}
+    runs-on: ubuntu-latest
+    container: silkeh/solus:solbuild
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Prepare
+        run: |
+          eopkg up
+          eopkg it check-devel efivar-devel gnu-efi-devel -y
+      - name: Build
+        run: |
+          meson setup build
+          cd ./build
+          meson compile
+      - name: Get release tag
+        id: find-tag
+        uses: oprypin/find-latest-tag@v1.1.0
+        with:
+          repository: ${{ github.repository }}
+      - name: Release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: ${{ steps.find-tag.outputs.tag }}
+          prerelease: false
+          files: |
+            ./build/src/clr-boot-manager
