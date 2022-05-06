@@ -1,3 +1,5 @@
+.vscode
+
 # we meson into ./build/
 /build/
 
