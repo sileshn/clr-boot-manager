@@ -1,5 +1,3 @@
-![](https://github.com/Fubuchi/clr-boot-manager/actions/workflows/main.yml/badge.svg)
-
 Patched version of [clr-boot-manager](https://github.com/clearlinux/clr-boot-manager) to prevent it outputs errors while using in WSL
 
 Errors for references:
